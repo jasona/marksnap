@@ -13,7 +13,21 @@
         AllowDrop="True"
         Drop="Window_Drop"
         DragOver="Window_DragOver"
-        DragLeave="Window_DragLeave">
+        DragLeave="Window_DragLeave"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Window.InputBindings>
+        <KeyBinding Key="O" Modifiers="Ctrl" Command="{x:Static ApplicationCommands.Open}"/>
+        <KeyBinding Key="W" Modifiers="Ctrl" Command="{x:Static ApplicationCommands.Close}"/>
+        <KeyBinding Key="F5" Command="{x:Static NavigationCommands.Refresh}"/>
+        <KeyBinding Key="R" Modifiers="Ctrl" Command="{x:Static NavigationCommands.Refresh}"/>
+    </Window.InputBindings>
+
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static ApplicationCommands.Open}" Executed="OpenCommand_Executed"/>
+        <CommandBinding Command="{x:Static ApplicationCommands.Close}" Executed="CloseCommand_Executed"/>
+        <CommandBinding Command="{x:Static NavigationCommands.Refresh}" Executed="RefreshCommand_Executed"/>
+    </Window.CommandBindings>
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="32"
@@ -75,6 +89,8 @@
                     <Button x:Name="OpenButton" Content="Open" Click="OpenButton_Click"
                             Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,8,0"/>
                     <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click"
+                            Style="{StaticResource ToolbarButtonStyle}" Margin="0,0,8,0"/>
+                    <Button x:Name="CloseTabButton" Content="Close Tab" Click="CloseTabButton_Click"
                             Style="{StaticResource ToolbarButtonStyle}"/>
                 </StackPanel>
 
@@ -94,12 +110,63 @@
             </Grid>
         </Border>
 
-        <!-- WebView for Markdown rendering -->
-        <wv2:WebView2 x:Name="MarkdownView"
-                      Grid.Row="2"
-                      DefaultBackgroundColor="#1e1e1e"/>
+        <!-- Tab Control for multiple documents -->
+        <TabControl x:Name="DocumentTabs" Grid.Row="2"
+                    Background="{DynamicResource WindowBackgroundBrush}"
+                    BorderThickness="0"
+                    SelectionChanged="DocumentTabs_SelectionChanged"
+                    Visibility="Collapsed">
+            <TabControl.Resources>
+                <Style TargetType="TabItem">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="TabItem">
+                                <Border x:Name="TabBorder"
+                                        Background="{DynamicResource ToolbarBackgroundBrush}"
+                                        BorderThickness="1,1,1,0"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        Margin="2,2,0,0"
+                                        CornerRadius="4,4,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="10,6">
+                                        <TextBlock x:Name="TabText"
+                                                   Text="{TemplateBinding Header}"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   MaxWidth="150"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <Button x:Name="CloseBtn" Content="&#xE8BB;"
+                                                FontFamily="Segoe MDL2 Assets"
+                                                FontSize="8"
+                                                Margin="8,0,0,0"
+                                                Padding="4,2"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                                Cursor="Hand"
+                                                Click="TabCloseButton_Click"
+                                                WindowChrome.IsHitTestVisibleInChrome="True"/>
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource WindowBackgroundBrush}"/>
+                                        <Setter TargetName="TabText" Property="Foreground" Value="{DynamicResource TextHeadingBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+                                    </Trigger>
+                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True">
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource WindowBackgroundBrush}"/>
+                                    </DataTrigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TabControl.Resources>
+        </TabControl>
 
-        <!-- Welcome panel (shown when no file is loaded) -->
+        <!-- Welcome panel (shown when no tabs are open) -->
         <Border x:Name="WelcomePanel" Grid.Row="2" Background="{DynamicResource WindowBackgroundBrush}" Visibility="Visible"
                 AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
@@ -112,7 +179,7 @@
             </StackPanel>
         </Border>
 
-        <!-- Invisible drop zone overlay (on top of WebView2 when content is loaded) -->
+        <!-- Invisible drop zone overlay (on top of tabs when content is loaded) -->
         <Border x:Name="DropZone" Grid.Row="2" Background="Transparent"
                 AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver"
                 IsHitTestVisible="False"/>

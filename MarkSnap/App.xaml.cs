@@ -9,6 +9,9 @@ namespace MarkSnap
     {
         public static string? FileToOpen { get; private set; }
         private static readonly string LogFile = Path.Combine(Path.GetTempPath(), "marksnap_debug.log");
+        private static SingleInstanceManager? _singleInstanceManager;
+
+        public static MainWindow? MainWindowInstance { get; private set; }
 
         public static void Log(string message)
         {
@@ -27,19 +30,78 @@ namespace MarkSnap
             Log("App.OnStartup called");
             Log($"Args count: {e.Args.Length}");
 
+            // Get file path from arguments
+            string? filePath = e.Args.Length > 0 ? e.Args[0] : null;
+
+            // Try to become the primary instance
+            _singleInstanceManager = new SingleInstanceManager();
+
+            if (!_singleInstanceManager.TryStartAsPrimary())
+            {
+                // Another instance is running - send file to it and exit
+                Log("Secondary instance detected, forwarding file to primary");
+
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    SingleInstanceManager.SendFileToPrimary(filePath);
+                }
+
+                // Shutdown this instance
+                Shutdown();
+                return;
+            }
+
+            Log("Primary instance started");
+
+            // Wire up file received event
+            _singleInstanceManager.FileReceived += OnFileReceivedFromSecondaryInstance;
+
             // Set up global exception handling
             DispatcherUnhandledException += App_DispatcherUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
 
-            // Check if a file path was passed as a command-line argument
-            if (e.Args.Length > 0)
+            // Store file path for MainWindow to pick up
+            if (!string.IsNullOrEmpty(filePath))
             {
-                FileToOpen = e.Args[0];
+                FileToOpen = filePath;
                 Log($"FileToOpen set to: {FileToOpen}");
             }
 
             base.OnStartup(e);
             Log("base.OnStartup completed");
+        }
+
+        private void OnFileReceivedFromSecondaryInstance(string filePath)
+        {
+            Log($"File received from secondary instance: {filePath}");
+
+            // Dispatch to UI thread
+            Dispatcher.Invoke(() =>
+            {
+                if (MainWindowInstance != null)
+                {
+                    // Bring window to foreground
+                    if (MainWindowInstance.WindowState == WindowState.Minimized)
+                    {
+                        MainWindowInstance.WindowState = WindowState.Normal;
+                    }
+                    MainWindowInstance.Activate();
+
+                    // Open the file in a new tab
+                    MainWindowInstance.OpenFileInNewTab(filePath);
+                }
+            });
+        }
+
+        public static void RegisterMainWindow(MainWindow window)
+        {
+            MainWindowInstance = window;
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            _singleInstanceManager?.Dispose();
+            base.OnExit(e);
         }
 
         private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

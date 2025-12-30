@@ -1,22 +1,36 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using Markdig;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 using Microsoft.Win32;
 
 namespace MarkSnap
 {
     public partial class MainWindow : Window
     {
-        private string? _currentFilePath;
         private readonly MarkdownPipeline _markdownPipeline;
-        private bool _webViewInitialized = false;
-        private string? _pendingHtml = null;
         private string _currentTheme = "System";
+        private CoreWebView2Environment? _webView2Environment;
+        private readonly Dictionary<TabItem, TabInfo> _tabInfos = new();
+        private List<string>? _pendingFilesToRestore;
+        private int _pendingActiveTabIndex;
+
+        private class TabInfo
+        {
+            public string FilePath { get; set; } = "";
+            public WebView2 WebView { get; set; } = null!;
+            public bool IsInitialized { get; set; }
+            public string? PendingHtml { get; set; }
+        }
 
         public MainWindow()
         {
@@ -33,6 +47,9 @@ namespace MarkSnap
                 throw;
             }
 
+            // Register with App for IPC
+            App.RegisterMainWindow(this);
+
             // Load saved window size/position and theme
             LoadWindowSettings();
 
@@ -44,7 +61,7 @@ namespace MarkSnap
                 .Build();
             App.Log("Markdig pipeline created");
 
-            // Initialize WebView2 after window is loaded
+            // Initialize WebView2 environment and window events
             Loaded += MainWindow_Loaded;
             StateChanged += MainWindow_StateChanged;
             App.Log("MainWindow constructor completed");
@@ -123,10 +140,13 @@ namespace MarkSnap
                 resources["LinkBrush"] = new SolidColorBrush(ColorFromHex("#0066cc"));
                 resources["CodeBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#f0f0f0"));
 
-                // Update WebView2 background
-                if (_webViewInitialized)
+                // Update WebView2 backgrounds for all tabs
+                foreach (var tabInfo in _tabInfos.Values)
                 {
-                    MarkdownView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                    if (tabInfo.IsInitialized)
+                    {
+                        tabInfo.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                    }
                 }
             }
             else
@@ -163,20 +183,50 @@ namespace MarkSnap
                 resources["LinkBrush"] = new SolidColorBrush(ColorFromHex("#3794ff"));
                 resources["CodeBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#2d2d2d"));
 
-                // Update WebView2 background
-                if (_webViewInitialized)
+                // Update WebView2 backgrounds for all tabs
+                foreach (var tabInfo in _tabInfos.Values)
                 {
-                    MarkdownView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30);
+                    if (tabInfo.IsInitialized)
+                    {
+                        tabInfo.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30);
+                    }
                 }
             }
 
-            // Refresh the current markdown if loaded
-            if (!string.IsNullOrEmpty(_currentFilePath) && File.Exists(_currentFilePath))
+            // Refresh all open tabs with new theme
+            foreach (var kvp in _tabInfos)
             {
-                LoadMarkdownFile(_currentFilePath);
+                if (!string.IsNullOrEmpty(kvp.Value.FilePath) && File.Exists(kvp.Value.FilePath))
+                {
+                    RefreshTabContent(kvp.Key, kvp.Value);
+                }
             }
 
             App.Log($"Applied theme: {theme} (effective: {effectiveTheme})");
+        }
+
+        private void RefreshTabContent(TabItem tab, TabInfo tabInfo)
+        {
+            try
+            {
+                string markdown = File.ReadAllText(tabInfo.FilePath);
+                string html = Markdown.ToHtml(markdown, _markdownPipeline);
+                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
+                string fullHtml = GenerateHtmlDocument(html, Path.GetFileName(tabInfo.FilePath), effectiveTheme);
+
+                if (tabInfo.IsInitialized)
+                {
+                    tabInfo.WebView.NavigateToString(fullHtml);
+                }
+                else
+                {
+                    tabInfo.PendingHtml = fullHtml;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Error refreshing tab: {ex.Message}");
+            }
         }
 
         private static Color ColorFromHex(string hex)
@@ -208,69 +258,332 @@ namespace MarkSnap
         {
             App.Log("MainWindow_Loaded started");
 
-            // Initialize WebView2 first
-            await InitializeWebView();
+            // Initialize shared WebView2 environment
+            await InitializeWebView2Environment();
 
-
-            // Then check if a file was passed as argument
+            // Check if a file was passed as argument - this takes priority
             if (!string.IsNullOrEmpty(App.FileToOpen) && File.Exists(App.FileToOpen))
             {
                 App.Log($"Loading file from args: {App.FileToOpen}");
-                LoadMarkdownFile(App.FileToOpen);
+                OpenFileInNewTab(App.FileToOpen);
+            }
+            else if (_pendingFilesToRestore != null && _pendingFilesToRestore.Count > 0)
+            {
+                // Restore previously open files
+                App.Log($"Restoring {_pendingFilesToRestore.Count} files from previous session");
+                foreach (var filePath in _pendingFilesToRestore)
+                {
+                    if (File.Exists(filePath))
+                    {
+                        OpenFileInNewTab(filePath);
+                    }
+                    else
+                    {
+                        App.Log($"Skipping missing file: {filePath}");
+                    }
+                }
+
+                // Restore active tab
+                if (_pendingActiveTabIndex >= 0 && _pendingActiveTabIndex < DocumentTabs.Items.Count)
+                {
+                    DocumentTabs.SelectedIndex = _pendingActiveTabIndex;
+                }
+
+                _pendingFilesToRestore = null;
             }
 
             App.Log("MainWindow_Loaded completed");
         }
 
-        private async Task InitializeWebView()
+        private async Task InitializeWebView2Environment()
         {
-            App.Log("InitializeWebView started");
+            App.Log("InitializeWebView2Environment started");
             try
             {
                 // Set environment to use a user data folder in temp
                 var userDataFolder = Path.Combine(Path.GetTempPath(), "MarkSnap_WebView2");
                 App.Log($"WebView2 user data folder: {userDataFolder}");
 
-                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
-                    null, userDataFolder, null);
+                _webView2Environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, null);
                 App.Log("CoreWebView2Environment created");
 
-                await MarkdownView.EnsureCoreWebView2Async(env);
-                App.Log("EnsureCoreWebView2Async completed");
-
-                MarkdownView.CoreWebView2.Settings.IsScriptEnabled = true;
-                MarkdownView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-
-                // Disable WebView2's built-in file drop handling
-                MarkdownView.AllowExternalDrop = false;
-
-                _webViewInitialized = true;
-
-                // Apply theme to WebView2 background
-                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
-                if (effectiveTheme == "Light")
-                {
-                    MarkdownView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(245, 245, 245);
-                }
-
-                // If there's pending HTML to display, show it now
-                if (_pendingHtml != null)
-                {
-                    MarkdownView.NavigateToString(_pendingHtml);
-                    _pendingHtml = null;
-                }
-
                 StatusText.Text = "Ready";
-                App.Log("WebView2 fully initialized");
             }
             catch (Exception ex)
             {
-                App.Log($"WebView2 FAILED: {ex}");
+                App.Log($"WebView2 environment FAILED: {ex}");
                 StatusText.Text = "WebView2 initialization failed";
                 MessageBox.Show($"Failed to initialize WebView2: {ex.Message}\n\nPlease ensure WebView2 Runtime is installed.\n\nYou can download it from:\nhttps://developer.microsoft.com/en-us/microsoft-edge/webview2/",
                     "WebView2 Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        #region Tab Management
+
+        /// <summary>
+        /// Opens a file in a new tab. Called from IPC when secondary instance sends a file.
+        /// </summary>
+        public void OpenFileInNewTab(string filePath)
+        {
+            App.Log($"OpenFileInNewTab: {filePath}");
+
+            if (!File.Exists(filePath))
+            {
+                MessageBox.Show($"File not found: {filePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Check if file is already open
+            var existingTab = GetTabForFile(filePath);
+            if (existingTab != null)
+            {
+                App.Log($"File already open, activating existing tab");
+                DocumentTabs.SelectedItem = existingTab;
+                return;
+            }
+
+            // Create new tab
+            var tabItem = new TabItem
+            {
+                Header = Path.GetFileName(filePath),
+                ToolTip = filePath
+            };
+
+            // Create WebView2 for this tab
+            var webView = new WebView2
+            {
+                AllowExternalDrop = false
+            };
+
+            // Create tab info
+            var tabInfo = new TabInfo
+            {
+                FilePath = filePath,
+                WebView = webView,
+                IsInitialized = false
+            };
+            _tabInfos[tabItem] = tabInfo;
+
+            // Set WebView as tab content
+            tabItem.Content = webView;
+
+            // Add tab and select it
+            DocumentTabs.Items.Add(tabItem);
+            DocumentTabs.SelectedItem = tabItem;
+
+            // Show tabs, hide welcome
+            DocumentTabs.Visibility = Visibility.Visible;
+            WelcomePanel.Visibility = Visibility.Collapsed;
+
+            // Initialize WebView2 and load content
+            InitializeTabWebView(tabItem, tabInfo);
+        }
+
+        private async void InitializeTabWebView(TabItem tab, TabInfo tabInfo)
+        {
+            App.Log($"InitializeTabWebView for {tabInfo.FilePath}");
+
+            try
+            {
+                if (_webView2Environment == null)
+                {
+                    App.Log("WebView2 environment not ready, waiting...");
+                    await InitializeWebView2Environment();
+                }
+
+                await tabInfo.WebView.EnsureCoreWebView2Async(_webView2Environment);
+
+                tabInfo.WebView.CoreWebView2.Settings.IsScriptEnabled = true;
+                tabInfo.WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
+                tabInfo.IsInitialized = true;
+
+                // Apply theme to WebView2 background
+                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
+                if (effectiveTheme == "Light")
+                {
+                    tabInfo.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                }
+                else
+                {
+                    tabInfo.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30);
+                }
+
+                // Load content
+                LoadMarkdownIntoTab(tabInfo);
+
+                // If there was pending HTML, display it now
+                if (tabInfo.PendingHtml != null)
+                {
+                    tabInfo.WebView.NavigateToString(tabInfo.PendingHtml);
+                    tabInfo.PendingHtml = null;
+                }
+
+                App.Log($"Tab WebView2 initialized for {tabInfo.FilePath}");
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Tab WebView2 initialization failed: {ex.Message}");
+                StatusText.Text = "Failed to initialize tab";
+            }
+        }
+
+        private void LoadMarkdownIntoTab(TabInfo tabInfo)
+        {
+            try
+            {
+                string markdown = File.ReadAllText(tabInfo.FilePath);
+                string html = Markdown.ToHtml(markdown, _markdownPipeline);
+                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
+                string fullHtml = GenerateHtmlDocument(html, Path.GetFileName(tabInfo.FilePath), effectiveTheme);
+
+                if (tabInfo.IsInitialized)
+                {
+                    tabInfo.WebView.NavigateToString(fullHtml);
+                }
+                else
+                {
+                    tabInfo.PendingHtml = fullHtml;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Error loading markdown into tab: {ex.Message}");
+            }
+        }
+
+        private TabItem? GetTabForFile(string filePath)
+        {
+            string normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
+            foreach (var kvp in _tabInfos)
+            {
+                if (Path.GetFullPath(kvp.Value.FilePath).ToLowerInvariant() == normalizedPath)
+                {
+                    return kvp.Key;
+                }
+            }
+            return null;
+        }
+
+        private void CloseTab(TabItem tab)
+        {
+            App.Log($"CloseTab");
+
+            if (_tabInfos.TryGetValue(tab, out var tabInfo))
+            {
+                // Dispose WebView2
+                tabInfo.WebView.Dispose();
+                _tabInfos.Remove(tab);
+            }
+
+            DocumentTabs.Items.Remove(tab);
+
+            // If no more tabs, show welcome panel
+            if (DocumentTabs.Items.Count == 0)
+            {
+                DocumentTabs.Visibility = Visibility.Collapsed;
+                WelcomePanel.Visibility = Visibility.Visible;
+                FileNameText.Text = "No file loaded";
+                Title = "MarkSnap - Markdown Viewer";
+                TitleBarText.Text = "MarkSnap";
+                StatusText.Text = "Ready";
+            }
+        }
+
+        private void DocumentTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (DocumentTabs.SelectedItem is TabItem selectedTab && _tabInfos.TryGetValue(selectedTab, out var tabInfo))
+            {
+                string fileName = Path.GetFileName(tabInfo.FilePath);
+                FileNameText.Text = fileName;
+                Title = $"MarkSnap - {fileName}";
+                TitleBarText.Text = $"MarkSnap - {fileName}";
+                StatusText.Text = $"Loaded: {tabInfo.FilePath}";
+            }
+        }
+
+        private void TabCloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button)
+            {
+                // Find the parent TabItem
+                var tabItem = FindParent<TabItem>(button);
+                if (tabItem != null)
+                {
+                    CloseTab(tabItem);
+                }
+            }
+        }
+
+        private void CloseTabButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Close the currently selected tab
+            if (DocumentTabs.SelectedItem is TabItem selectedTab)
+            {
+                CloseTab(selectedTab);
+            }
+        }
+
+        private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            var parent = VisualTreeHelper.GetParent(child);
+            while (parent != null)
+            {
+                if (parent is T typedParent)
+                    return typedParent;
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            return null;
+        }
+
+        #endregion
+
+        #region Keyboard Shortcuts
+
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            // Handle Ctrl+Tab and Ctrl+Shift+Tab for tab navigation
+            if (e.Key == System.Windows.Input.Key.Tab &&
+                (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
+            {
+                if (DocumentTabs.Items.Count > 1)
+                {
+                    bool shiftPressed = (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == System.Windows.Input.ModifierKeys.Shift;
+
+                    if (shiftPressed)
+                    {
+                        // Previous tab
+                        int newIndex = DocumentTabs.SelectedIndex - 1;
+                        if (newIndex < 0) newIndex = DocumentTabs.Items.Count - 1;
+                        DocumentTabs.SelectedIndex = newIndex;
+                    }
+                    else
+                    {
+                        // Next tab
+                        int newIndex = DocumentTabs.SelectedIndex + 1;
+                        if (newIndex >= DocumentTabs.Items.Count) newIndex = 0;
+                        DocumentTabs.SelectedIndex = newIndex;
+                    }
+                }
+                e.Handled = true;
+            }
+        }
+
+        private void OpenCommand_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            OpenButton_Click(sender, e);
+        }
+
+        private void CloseCommand_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            CloseTabButton_Click(sender, e);
+        }
+
+        private void RefreshCommand_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            RefreshButton_Click(sender, e);
+        }
+
+        #endregion
 
         private void OpenButton_Click(object sender, RoutedEventArgs e)
         {
@@ -282,16 +595,19 @@ namespace MarkSnap
 
             if (dialog.ShowDialog() == true)
             {
-                LoadMarkdownFile(dialog.FileName);
+                OpenFileInNewTab(dialog.FileName);
             }
         }
 
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            if (!string.IsNullOrEmpty(_currentFilePath) && File.Exists(_currentFilePath))
+            if (DocumentTabs.SelectedItem is TabItem selectedTab && _tabInfos.TryGetValue(selectedTab, out var tabInfo))
             {
-                LoadMarkdownFile(_currentFilePath);
-                StatusText.Text = "File refreshed";
+                if (!string.IsNullOrEmpty(tabInfo.FilePath) && File.Exists(tabInfo.FilePath))
+                {
+                    LoadMarkdownIntoTab(tabInfo);
+                    StatusText.Text = "File refreshed";
+                }
             }
         }
 
@@ -439,47 +755,6 @@ namespace MarkSnap
 
         [System.Runtime.InteropServices.DllImport("shell32.dll")]
         private static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
-
-        private void LoadMarkdownFile(string filePath)
-        {
-            try
-            {
-                if (!File.Exists(filePath))
-                {
-                    MessageBox.Show($"File not found: {filePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                _currentFilePath = filePath;
-                string markdown = File.ReadAllText(filePath);
-                string html = Markdown.ToHtml(markdown, _markdownPipeline);
-
-                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
-                string fullHtml = GenerateHtmlDocument(html, Path.GetFileName(filePath), effectiveTheme);
-
-                if (_webViewInitialized)
-                {
-                    MarkdownView.NavigateToString(fullHtml);
-                }
-                else
-                {
-                    // Store for later when WebView2 is ready
-                    _pendingHtml = fullHtml;
-                }
-
-                // Update UI
-                WelcomePanel.Visibility = Visibility.Collapsed;
-                FileNameText.Text = Path.GetFileName(filePath);
-                Title = $"MarkSnap - {Path.GetFileName(filePath)}";
-                TitleBarText.Text = $"MarkSnap - {Path.GetFileName(filePath)}";
-                StatusText.Text = $"Loaded: {filePath}";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Error loading file";
-            }
-        }
 
         private string GenerateHtmlDocument(string bodyHtml, string title, string theme)
         {
@@ -764,13 +1039,17 @@ namespace MarkSnap
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 string[]? files = e.Data.GetData(DataFormats.FileDrop) as string[];
-                if (files?.Length > 0)
+                if (files != null)
                 {
-                    App.Log($"Dropped file: {files[0]}");
-                    string ext = Path.GetExtension(files[0]).ToLowerInvariant();
-                    if (ext == ".md" || ext == ".markdown")
+                    // Open each dropped markdown file in a new tab
+                    foreach (var file in files)
                     {
-                        LoadMarkdownFile(files[0]);
+                        App.Log($"Dropped file: {file}");
+                        string ext = Path.GetExtension(file).ToLowerInvariant();
+                        if (ext == ".md" || ext == ".markdown")
+                        {
+                            OpenFileInNewTab(file);
+                        }
                     }
                 }
             }
@@ -801,7 +1080,15 @@ namespace MarkSnap
                         WindowState = settings.IsMaximized ? WindowState.Maximized : WindowState.Normal;
                         _currentTheme = settings.Theme ?? "System";
                         ApplyTheme(_currentTheme);
-                        App.Log($"Loaded window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top}), Theme: {_currentTheme}");
+
+                        // Store open files to restore after window is loaded
+                        if (settings.OpenFiles != null && settings.OpenFiles.Count > 0)
+                        {
+                            _pendingFilesToRestore = settings.OpenFiles;
+                            _pendingActiveTabIndex = settings.ActiveTabIndex;
+                        }
+
+                        App.Log($"Loaded window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top}), Theme: {_currentTheme}, OpenFiles: {settings.OpenFiles?.Count ?? 0}");
                         return;
                     }
                 }
@@ -824,6 +1111,15 @@ namespace MarkSnap
         {
             try
             {
+                // Collect open file paths
+                var openFiles = _tabInfos.Values
+                    .Select(ti => ti.FilePath)
+                    .Where(f => !string.IsNullOrEmpty(f))
+                    .ToList();
+
+                // Get active tab index
+                int activeIndex = DocumentTabs.SelectedIndex;
+
                 var settings = new AppSettings
                 {
                     Left = RestoreBounds.Left,
@@ -831,7 +1127,9 @@ namespace MarkSnap
                     Width = RestoreBounds.Width,
                     Height = RestoreBounds.Height,
                     IsMaximized = WindowState == WindowState.Maximized,
-                    Theme = _currentTheme
+                    Theme = _currentTheme,
+                    OpenFiles = openFiles,
+                    ActiveTabIndex = activeIndex >= 0 ? activeIndex : 0
                 };
 
                 var directory = Path.GetDirectoryName(SettingsFilePath);
@@ -842,7 +1140,7 @@ namespace MarkSnap
 
                 var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(SettingsFilePath, json);
-                App.Log($"Saved window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top}), Theme: {settings.Theme}");
+                App.Log($"Saved window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top}), Theme: {settings.Theme}, OpenFiles: {openFiles.Count}");
             }
             catch (Exception ex)
             {
@@ -867,5 +1165,7 @@ namespace MarkSnap
         public double Height { get; set; }
         public bool IsMaximized { get; set; }
         public string? Theme { get; set; }
+        public List<string>? OpenFiles { get; set; }
+        public int ActiveTabIndex { get; set; }
     }
 }
