@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using Markdig;
 using Microsoft.Win32;
 
@@ -15,6 +16,7 @@ namespace MarkSnap
         private readonly MarkdownPipeline _markdownPipeline;
         private bool _webViewInitialized = false;
         private string? _pendingHtml = null;
+        private string _currentTheme = "System";
 
         public MainWindow()
         {
@@ -31,7 +33,7 @@ namespace MarkSnap
                 throw;
             }
 
-            // Load saved window size/position
+            // Load saved window size/position and theme
             LoadWindowSettings();
 
             // Configure Markdig with common extensions
@@ -44,8 +46,163 @@ namespace MarkSnap
 
             // Initialize WebView2 after window is loaded
             Loaded += MainWindow_Loaded;
+            StateChanged += MainWindow_StateChanged;
             App.Log("MainWindow constructor completed");
         }
+
+        #region Window Chrome Button Handlers
+
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            // Update maximize button icon based on window state
+            MaximizeButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+        }
+
+        #endregion
+
+        #region Theme Management
+
+        private void ApplyTheme(string theme)
+        {
+            _currentTheme = theme;
+            string effectiveTheme = theme;
+
+            if (theme == "System")
+            {
+                effectiveTheme = GetSystemTheme();
+            }
+
+            var resources = Application.Current.Resources;
+
+            if (effectiveTheme == "Light")
+            {
+                // Light theme - update both colors and brushes
+                resources["WindowBackgroundColor"] = ColorFromHex("#f5f5f5");
+                resources["TitleBarBackgroundColor"] = ColorFromHex("#e8e8e8");
+                resources["ToolbarBackgroundColor"] = ColorFromHex("#f0f0f0");
+                resources["ButtonBackgroundColor"] = ColorFromHex("#e0e0e0");
+                resources["ButtonHoverColor"] = ColorFromHex("#d0d0d0");
+                resources["ButtonPressedColor"] = ColorFromHex("#c0c0c0");
+                resources["TextPrimaryColor"] = ColorFromHex("#333333");
+                resources["TextSecondaryColor"] = ColorFromHex("#666666");
+                resources["TextMutedColor"] = ColorFromHex("#888888");
+                resources["TextHeadingColor"] = ColorFromHex("#1a1a1a");
+                resources["AccentColor"] = ColorFromHex("#0078d4");
+                resources["BorderColor"] = ColorFromHex("#d0d0d0");
+                resources["LinkColor"] = ColorFromHex("#0066cc");
+                resources["CodeBackgroundColor"] = ColorFromHex("#f0f0f0");
+
+                // Update brushes directly for immediate UI refresh
+                resources["WindowBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#f5f5f5"));
+                resources["TitleBarBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#e8e8e8"));
+                resources["ToolbarBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#f0f0f0"));
+                resources["ButtonBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#e0e0e0"));
+                resources["ButtonHoverBrush"] = new SolidColorBrush(ColorFromHex("#d0d0d0"));
+                resources["ButtonPressedBrush"] = new SolidColorBrush(ColorFromHex("#c0c0c0"));
+                resources["TextPrimaryBrush"] = new SolidColorBrush(ColorFromHex("#333333"));
+                resources["TextSecondaryBrush"] = new SolidColorBrush(ColorFromHex("#666666"));
+                resources["TextMutedBrush"] = new SolidColorBrush(ColorFromHex("#888888"));
+                resources["TextHeadingBrush"] = new SolidColorBrush(ColorFromHex("#1a1a1a"));
+                resources["AccentBrush"] = new SolidColorBrush(ColorFromHex("#0078d4"));
+                resources["BorderBrush"] = new SolidColorBrush(ColorFromHex("#d0d0d0"));
+                resources["LinkBrush"] = new SolidColorBrush(ColorFromHex("#0066cc"));
+                resources["CodeBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#f0f0f0"));
+
+                // Update WebView2 background
+                if (_webViewInitialized)
+                {
+                    MarkdownView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                }
+            }
+            else
+            {
+                // Dark theme - update both colors and brushes
+                resources["WindowBackgroundColor"] = ColorFromHex("#1e1e1e");
+                resources["TitleBarBackgroundColor"] = ColorFromHex("#1e1e1e");
+                resources["ToolbarBackgroundColor"] = ColorFromHex("#2d2d2d");
+                resources["ButtonBackgroundColor"] = ColorFromHex("#3c3c3c");
+                resources["ButtonHoverColor"] = ColorFromHex("#4c4c4c");
+                resources["ButtonPressedColor"] = ColorFromHex("#5c5c5c");
+                resources["TextPrimaryColor"] = ColorFromHex("#cccccc");
+                resources["TextSecondaryColor"] = ColorFromHex("#888888");
+                resources["TextMutedColor"] = ColorFromHex("#666666");
+                resources["TextHeadingColor"] = ColorFromHex("#ffffff");
+                resources["AccentColor"] = ColorFromHex("#007acc");
+                resources["BorderColor"] = ColorFromHex("#404040");
+                resources["LinkColor"] = ColorFromHex("#3794ff");
+                resources["CodeBackgroundColor"] = ColorFromHex("#2d2d2d");
+
+                // Update brushes directly for immediate UI refresh
+                resources["WindowBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#1e1e1e"));
+                resources["TitleBarBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#1e1e1e"));
+                resources["ToolbarBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#2d2d2d"));
+                resources["ButtonBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#3c3c3c"));
+                resources["ButtonHoverBrush"] = new SolidColorBrush(ColorFromHex("#4c4c4c"));
+                resources["ButtonPressedBrush"] = new SolidColorBrush(ColorFromHex("#5c5c5c"));
+                resources["TextPrimaryBrush"] = new SolidColorBrush(ColorFromHex("#cccccc"));
+                resources["TextSecondaryBrush"] = new SolidColorBrush(ColorFromHex("#888888"));
+                resources["TextMutedBrush"] = new SolidColorBrush(ColorFromHex("#666666"));
+                resources["TextHeadingBrush"] = new SolidColorBrush(ColorFromHex("#ffffff"));
+                resources["AccentBrush"] = new SolidColorBrush(ColorFromHex("#007acc"));
+                resources["BorderBrush"] = new SolidColorBrush(ColorFromHex("#404040"));
+                resources["LinkBrush"] = new SolidColorBrush(ColorFromHex("#3794ff"));
+                resources["CodeBackgroundBrush"] = new SolidColorBrush(ColorFromHex("#2d2d2d"));
+
+                // Update WebView2 background
+                if (_webViewInitialized)
+                {
+                    MarkdownView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30);
+                }
+            }
+
+            // Refresh the current markdown if loaded
+            if (!string.IsNullOrEmpty(_currentFilePath) && File.Exists(_currentFilePath))
+            {
+                LoadMarkdownFile(_currentFilePath);
+            }
+
+            App.Log($"Applied theme: {theme} (effective: {effectiveTheme})");
+        }
+
+        private static Color ColorFromHex(string hex)
+        {
+            return (Color)ColorConverter.ConvertFromString(hex);
+        }
+
+        private static string GetSystemTheme()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                var value = key?.GetValue("AppsUseLightTheme");
+                if (value is int useLightTheme)
+                {
+                    return useLightTheme == 1 ? "Light" : "Dark";
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Failed to detect system theme: {ex.Message}");
+            }
+            return "Dark"; // Default to dark if detection fails
+        }
+
+        #endregion
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -89,6 +246,13 @@ namespace MarkSnap
 
                 _webViewInitialized = true;
 
+                // Apply theme to WebView2 background
+                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
+                if (effectiveTheme == "Light")
+                {
+                    MarkdownView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                }
+
                 // If there's pending HTML to display, show it now
                 if (_pendingHtml != null)
                 {
@@ -128,6 +292,20 @@ namespace MarkSnap
             {
                 LoadMarkdownFile(_currentFilePath);
                 StatusText.Text = "File refreshed";
+            }
+        }
+
+        private void SettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = new SettingsWindow(_currentTheme)
+            {
+                Owner = this
+            };
+
+            if (settingsWindow.ShowDialog() == true)
+            {
+                ApplyTheme(settingsWindow.SelectedTheme);
+                SaveWindowSettings();
             }
         }
 
@@ -276,7 +454,8 @@ namespace MarkSnap
                 string markdown = File.ReadAllText(filePath);
                 string html = Markdown.ToHtml(markdown, _markdownPipeline);
 
-                string fullHtml = GenerateHtmlDocument(html, Path.GetFileName(filePath));
+                string effectiveTheme = _currentTheme == "System" ? GetSystemTheme() : _currentTheme;
+                string fullHtml = GenerateHtmlDocument(html, Path.GetFileName(filePath), effectiveTheme);
 
                 if (_webViewInitialized)
                 {
@@ -291,9 +470,8 @@ namespace MarkSnap
                 // Update UI
                 WelcomePanel.Visibility = Visibility.Collapsed;
                 FileNameText.Text = Path.GetFileName(filePath);
-                FileNameText.Foreground = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(204, 204, 204));
                 Title = $"MarkSnap - {Path.GetFileName(filePath)}";
+                TitleBarText.Text = $"MarkSnap - {Path.GetFileName(filePath)}";
                 StatusText.Text = $"Loaded: {filePath}";
             }
             catch (Exception ex)
@@ -303,8 +481,24 @@ namespace MarkSnap
             }
         }
 
-        private string GenerateHtmlDocument(string bodyHtml, string title)
+        private string GenerateHtmlDocument(string bodyHtml, string title, string theme)
         {
+            bool isDark = theme == "Dark";
+
+            string bgColor = isDark ? "#1e1e1e" : "#f5f5f5";
+            string textColor = isDark ? "#d4d4d4" : "#333333";
+            string headingColor = isDark ? "#ffffff" : "#1a1a1a";
+            string linkColor = isDark ? "#3794ff" : "#0066cc";
+            string codeBg = isDark ? "#2d2d2d" : "#f0f0f0";
+            string borderColor = isDark ? "#404040" : "#d0d0d0";
+            string blockquoteBorder = isDark ? "#007acc" : "#0078d4";
+            string blockquoteBg = isDark ? "rgba(0, 122, 204, 0.1)" : "rgba(0, 120, 212, 0.08)";
+            string scrollbarThumb = isDark ? "#555" : "#c0c0c0";
+            string scrollbarThumbHover = isDark ? "#666" : "#a0a0a0";
+            string tableRowAlt = isDark ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)";
+            string markBg = isDark ? "#5c5c00" : "#fff3cd";
+            string markColor = isDark ? "#fff" : "#664d03";
+
             return $@"<!DOCTYPE html>
 <html>
 <head>
@@ -312,13 +506,13 @@ namespace MarkSnap
     <title>{System.Web.HttpUtility.HtmlEncode(title)}</title>
     <style>
         :root {{
-            --bg-color: #1e1e1e;
-            --text-color: #d4d4d4;
-            --heading-color: #ffffff;
-            --link-color: #3794ff;
-            --code-bg: #2d2d2d;
-            --border-color: #404040;
-            --blockquote-border: #007acc;
+            --bg-color: {bgColor};
+            --text-color: {textColor};
+            --heading-color: {headingColor};
+            --link-color: {linkColor};
+            --code-bg: {codeBg};
+            --border-color: {borderColor};
+            --blockquote-border: {blockquoteBorder};
         }}
 
         * {{
@@ -359,7 +553,7 @@ namespace MarkSnap
         h3 {{ font-size: 1.4em; }}
         h4 {{ font-size: 1.2em; }}
         h5 {{ font-size: 1.1em; }}
-        h6 {{ font-size: 1em; color: #888; }}
+        h6 {{ font-size: 1em; color: {(isDark ? "#888" : "#666")}; }}
 
         p {{
             margin: 1em 0;
@@ -401,8 +595,8 @@ namespace MarkSnap
             margin: 1em 0;
             padding: 0.5em 1em;
             border-left: 4px solid var(--blockquote-border);
-            background-color: rgba(0, 122, 204, 0.1);
-            color: #b0b0b0;
+            background-color: {blockquoteBg};
+            color: {(isDark ? "#b0b0b0" : "#555555")};
         }}
 
         blockquote p {{
@@ -456,7 +650,7 @@ namespace MarkSnap
         }}
 
         tr:nth-child(even) {{
-            background-color: rgba(255, 255, 255, 0.02);
+            background-color: {tableRowAlt};
         }}
 
         hr {{
@@ -488,8 +682,8 @@ namespace MarkSnap
         }}
 
         mark {{
-            background-color: #5c5c00;
-            color: #fff;
+            background-color: {markBg};
+            color: {markColor};
             padding: 0.1em 0.3em;
             border-radius: 3px;
         }}
@@ -505,12 +699,12 @@ namespace MarkSnap
         }}
 
         ::-webkit-scrollbar-thumb {{
-            background: #555;
+            background: {scrollbarThumb};
             border-radius: 5px;
         }}
 
         ::-webkit-scrollbar-thumb:hover {{
-            background: #666;
+            background: {scrollbarThumbHover};
         }}
     </style>
 </head>
@@ -543,8 +737,7 @@ namespace MarkSnap
                 e.Effects = DragDropEffects.Copy;
                 // Show drop zone with visual feedback
                 DropZone.IsHitTestVisible = true;
-                DropZone.Background = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromArgb(40, 0, 122, 204));
+                DropZone.Background = new SolidColorBrush(Color.FromArgb(40, 0, 122, 204));
             }
             else
             {
@@ -557,7 +750,7 @@ namespace MarkSnap
         {
             // Hide drop zone visual feedback
             DropZone.IsHitTestVisible = false;
-            DropZone.Background = System.Windows.Media.Brushes.Transparent;
+            DropZone.Background = Brushes.Transparent;
         }
 
         private void Window_Drop(object sender, DragEventArgs e)
@@ -566,7 +759,7 @@ namespace MarkSnap
 
             // Hide drop zone visual feedback
             DropZone.IsHitTestVisible = false;
-            DropZone.Background = System.Windows.Media.Brushes.Transparent;
+            DropZone.Background = Brushes.Transparent;
 
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
@@ -598,7 +791,7 @@ namespace MarkSnap
                 if (File.Exists(SettingsFilePath))
                 {
                     var json = File.ReadAllText(SettingsFilePath);
-                    var settings = JsonSerializer.Deserialize<WindowSettings>(json);
+                    var settings = JsonSerializer.Deserialize<AppSettings>(json);
                     if (settings != null)
                     {
                         Left = settings.Left;
@@ -606,7 +799,9 @@ namespace MarkSnap
                         Width = settings.Width;
                         Height = settings.Height;
                         WindowState = settings.IsMaximized ? WindowState.Maximized : WindowState.Normal;
-                        App.Log($"Loaded window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top})");
+                        _currentTheme = settings.Theme ?? "System";
+                        ApplyTheme(_currentTheme);
+                        App.Log($"Loaded window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top}), Theme: {_currentTheme}");
                         return;
                     }
                 }
@@ -616,11 +811,12 @@ namespace MarkSnap
                 App.Log($"Failed to load window settings: {ex.Message}");
             }
 
-            // No settings found - center window on primary screen
+            // No settings found - center window on primary screen and apply default theme
             var screenWidth = SystemParameters.PrimaryScreenWidth;
             var screenHeight = SystemParameters.PrimaryScreenHeight;
             Left = (screenWidth - Width) / 2;
             Top = (screenHeight - Height) / 2;
+            ApplyTheme("System");
             App.Log("No saved settings, centering window on screen");
         }
 
@@ -628,13 +824,14 @@ namespace MarkSnap
         {
             try
             {
-                var settings = new WindowSettings
+                var settings = new AppSettings
                 {
                     Left = RestoreBounds.Left,
                     Top = RestoreBounds.Top,
                     Width = RestoreBounds.Width,
                     Height = RestoreBounds.Height,
-                    IsMaximized = WindowState == WindowState.Maximized
+                    IsMaximized = WindowState == WindowState.Maximized,
+                    Theme = _currentTheme
                 };
 
                 var directory = Path.GetDirectoryName(SettingsFilePath);
@@ -645,7 +842,7 @@ namespace MarkSnap
 
                 var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(SettingsFilePath, json);
-                App.Log($"Saved window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top})");
+                App.Log($"Saved window settings: {settings.Width}x{settings.Height} at ({settings.Left}, {settings.Top}), Theme: {settings.Theme}");
             }
             catch (Exception ex)
             {
@@ -662,12 +859,13 @@ namespace MarkSnap
         #endregion
     }
 
-    internal class WindowSettings
+    internal class AppSettings
     {
         public double Left { get; set; }
         public double Top { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
         public bool IsMaximized { get; set; }
+        public string? Theme { get; set; }
     }
 }

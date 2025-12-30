@@ -3,5 +3,118 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <!-- Theme Colors - Dark Theme (Default) -->
+        <Color x:Key="WindowBackgroundColor">#1e1e1e</Color>
+        <Color x:Key="TitleBarBackgroundColor">#1e1e1e</Color>
+        <Color x:Key="ToolbarBackgroundColor">#2d2d2d</Color>
+        <Color x:Key="ButtonBackgroundColor">#3c3c3c</Color>
+        <Color x:Key="ButtonHoverColor">#4c4c4c</Color>
+        <Color x:Key="ButtonPressedColor">#5c5c5c</Color>
+        <Color x:Key="TextPrimaryColor">#cccccc</Color>
+        <Color x:Key="TextSecondaryColor">#888888</Color>
+        <Color x:Key="TextMutedColor">#666666</Color>
+        <Color x:Key="TextHeadingColor">#ffffff</Color>
+        <Color x:Key="AccentColor">#007acc</Color>
+        <Color x:Key="BorderColor">#404040</Color>
+        <Color x:Key="LinkColor">#3794ff</Color>
+        <Color x:Key="CodeBackgroundColor">#2d2d2d</Color>
+
+        <!-- SolidColorBrushes for binding -->
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{DynamicResource WindowBackgroundColor}"/>
+        <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="{DynamicResource TitleBarBackgroundColor}"/>
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="{DynamicResource ToolbarBackgroundColor}"/>
+        <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="{DynamicResource ButtonBackgroundColor}"/>
+        <SolidColorBrush x:Key="ButtonHoverBrush" Color="{DynamicResource ButtonHoverColor}"/>
+        <SolidColorBrush x:Key="ButtonPressedBrush" Color="{DynamicResource ButtonPressedColor}"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource TextPrimaryColor}"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource TextSecondaryColor}"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource TextMutedColor}"/>
+        <SolidColorBrush x:Key="TextHeadingBrush" Color="{DynamicResource TextHeadingColor}"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="{DynamicResource BorderColor}"/>
+        <SolidColorBrush x:Key="LinkBrush" Color="{DynamicResource LinkColor}"/>
+        <SolidColorBrush x:Key="CodeBackgroundBrush" Color="{DynamicResource CodeBackgroundColor}"/>
+
+        <!-- Window Button Style (for title bar buttons) -->
+        <Style x:Key="WindowButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Cursor" Value="Arrow"/>
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource ButtonPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Close Button Style (red on hover) -->
+        <Style x:Key="CloseButtonStyle" TargetType="Button" BasedOn="{StaticResource WindowButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#e81123"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#f1707a"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Toolbar Button Style -->
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource ButtonPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Application.Resources>
 </Application>
