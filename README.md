@@ -9,12 +9,15 @@ A fast, lightweight Markdown viewer for Windows with theme support and a modern 
 ## Features
 
 - **Instant Preview** - View Markdown files with beautiful, GitHub-style rendering
+- **Tabbed Interface** - Open multiple documents in tabs within a single window
+- **Single Instance** - Double-clicking .md files opens them in the existing window as new tabs
 - **Light & Dark Themes** - Choose between Light, Dark, or Follow System theme
 - **Custom Title Bar** - Modern styled window with integrated controls
-- **Drag & Drop** - Simply drag `.md` files onto the window to view them
+- **Drag & Drop** - Simply drag `.md` files onto the window to view them (supports multiple files)
 - **File Association** - Register as the default handler for `.md` and `.markdown` files
 - **Live Refresh** - Quickly reload the current file to see changes
-- **Window Memory** - Remembers your window size, position, and theme between sessions
+- **Session Restore** - Remembers open tabs, window size, position, and theme between sessions
+- **Keyboard Shortcuts** - Full keyboard navigation support
 - **Rich Markdown Support** - Tables, task lists, code blocks, emojis, and more
 
 ## Screenshots
@@ -73,6 +76,16 @@ Now double-clicking any `.md` file will open it in MarkSnap.
 
 Your theme preference is saved and restored on next launch.
 
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+O` | Open file |
+| `Ctrl+W` | Close current tab |
+| `Ctrl+Tab` | Next tab |
+| `Ctrl+Shift+Tab` | Previous tab |
+| `F5` or `Ctrl+R` | Refresh current file |
+
 ## Markdown Support
 
 MarkSnap uses [Markdig](https://github.com/xoofx/markdig) for Markdown parsing, supporting:
@@ -98,6 +111,8 @@ Saved settings:
 - Window size (Width, Height)
 - Maximized state
 - Theme preference (Light, Dark, or System)
+- Open file paths (for session restore)
+- Active tab index
 
 ## Tech Stack
 
@@ -111,13 +126,14 @@ Saved settings:
 ```
 marksnap/
 ├── MarkSnap/
-│   ├── App.xaml              # Application entry point and theme resources
-│   ├── App.xaml.cs           # Application startup logic
-│   ├── MainWindow.xaml       # Main window UI with custom title bar
-│   ├── MainWindow.xaml.cs    # Window logic, themes, and Markdown rendering
-│   ├── SettingsWindow.xaml   # Settings dialog UI
-│   ├── SettingsWindow.xaml.cs# Settings dialog logic
-│   └── MarkSnap.csproj       # Project configuration
+│   ├── App.xaml               # Application entry point and theme resources
+│   ├── App.xaml.cs            # Application startup and single-instance logic
+│   ├── MainWindow.xaml        # Main window UI with tabs and custom title bar
+│   ├── MainWindow.xaml.cs     # Window logic, tab management, and rendering
+│   ├── SingleInstanceManager.cs # Mutex and named pipe IPC for single instance
+│   ├── SettingsWindow.xaml    # Settings dialog UI
+│   ├── SettingsWindow.xaml.cs # Settings dialog logic
+│   └── MarkSnap.csproj        # Project configuration
 └── README.md
 ```
 
