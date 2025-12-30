@@ -1,6 +1,6 @@
 # MarkSnap
 
-A fast, lightweight Markdown viewer for Windows with a modern dark theme.
+A fast, lightweight Markdown viewer for Windows with theme support and a modern interface.
 
 ![Windows](https://img.shields.io/badge/platform-Windows-blue)
 ![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%209.0%20%7C%2010.0-purple)
@@ -9,11 +9,12 @@ A fast, lightweight Markdown viewer for Windows with a modern dark theme.
 ## Features
 
 - **Instant Preview** - View Markdown files with beautiful, GitHub-style rendering
-- **Dark Theme** - Easy on the eyes with a modern dark interface
+- **Light & Dark Themes** - Choose between Light, Dark, or Follow System theme
+- **Custom Title Bar** - Modern styled window with integrated controls
 - **Drag & Drop** - Simply drag `.md` files onto the window to view them
 - **File Association** - Register as the default handler for `.md` and `.markdown` files
 - **Live Refresh** - Quickly reload the current file to see changes
-- **Window Memory** - Remembers your window size and position between sessions
+- **Window Memory** - Remembers your window size, position, and theme between sessions
 - **Rich Markdown Support** - Tables, task lists, code blocks, emojis, and more
 
 ## Screenshots
@@ -35,7 +36,7 @@ Download the latest release from the [Releases](../../releases) page.
 ### Build from Source
 
 ```bash
-git clone https://github.com/yourusername/marksnap.git
+git clone https://github.com/jasona/marksnap.git
 cd marksnap
 dotnet build -c Release
 ```
@@ -61,11 +62,16 @@ There are several ways to open Markdown files:
 
 Now double-clicking any `.md` file will open it in MarkSnap.
 
-### Keyboard Shortcuts
+### Changing Theme
 
-| Action | Shortcut |
-|--------|----------|
-| Refresh current file | Click "Refresh" button |
+1. Click "Settings" in the toolbar
+2. Choose your preferred theme:
+   - **Follow system setting** - Automatically matches Windows light/dark mode
+   - **Light** - Light background with dark text
+   - **Dark** - Dark background with light text
+3. Click "Save"
+
+Your theme preference is saved and restored on next launch.
 
 ## Markdown Support
 
@@ -87,10 +93,11 @@ MarkSnap stores its settings in:
 %LocalAppData%\MarkSnap\settings.json
 ```
 
-Currently saved settings:
+Saved settings:
 - Window position (X, Y)
 - Window size (Width, Height)
 - Maximized state
+- Theme preference (Light, Dark, or System)
 
 ## Tech Stack
 
@@ -104,10 +111,12 @@ Currently saved settings:
 ```
 marksnap/
 ├── MarkSnap/
-│   ├── App.xaml              # Application entry point
+│   ├── App.xaml              # Application entry point and theme resources
 │   ├── App.xaml.cs           # Application startup logic
-│   ├── MainWindow.xaml       # Main window UI layout
-│   ├── MainWindow.xaml.cs    # Window logic and Markdown rendering
+│   ├── MainWindow.xaml       # Main window UI with custom title bar
+│   ├── MainWindow.xaml.cs    # Window logic, themes, and Markdown rendering
+│   ├── SettingsWindow.xaml   # Settings dialog UI
+│   ├── SettingsWindow.xaml.cs# Settings dialog logic
 │   └── MarkSnap.csproj       # Project configuration
 └── README.md
 ```
